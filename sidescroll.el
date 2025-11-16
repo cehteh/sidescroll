@@ -111,7 +111,20 @@ A smaller value makes more content visible."
       
       ;; Set other visual properties
       (setq cursor-type nil)
-      (setq truncate-lines nil))
+      (setq truncate-lines t)
+      
+      ;; Disable fringes
+      (set-window-fringes window 0 0)
+      
+      ;; Disable truncation indicator
+      (setq-local fringe-indicator-alist
+                  (cons '(truncation . nil) fringe-indicator-alist))
+      
+      ;; Setup mouse bindings for dragging
+      (use-local-map (make-sparse-keymap))
+      (local-set-key [down-mouse-1] 'sidescroll--mouse-drag)
+      (local-set-key [drag-mouse-1] 'sidescroll--mouse-drag)
+      (local-set-key [mouse-1] 'sidescroll--mouse-drag))
     window))
 
 (defun sidescroll--sync-to-minimap ()
@@ -140,6 +153,16 @@ A smaller value makes more content visible."
         (goto-char minimap-point)
         (recenter))
       (setq sidescroll--updating nil))))
+
+(defun sidescroll--mouse-drag (event)
+  "Handle mouse drag events in the minimap.
+Synchronize the main buffer position when clicking or dragging in the minimap."
+  (interactive "e")
+  (let ((start (event-start event)))
+    (when (windowp (posn-window start))
+      (with-selected-window (posn-window start)
+        (goto-char (posn-point start))
+        (sidescroll--sync-from-minimap)))))
 
 (defun sidescroll--update-minimap-content ()
   "Update the minimap buffer to reflect the main buffer's content."
