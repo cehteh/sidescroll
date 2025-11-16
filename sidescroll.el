@@ -136,6 +136,11 @@ Can be either \\='left or \\='right."
         (define-key map [down-mouse-1] 'sidescroll--mouse-drag)
         (define-key map [drag-mouse-1] 'sidescroll--mouse-drag)
         (define-key map [mouse-1] 'sidescroll--mouse-drag)
+        ;; Mouse wheel bindings
+        (define-key map [wheel-up] 'sidescroll--mouse-wheel)
+        (define-key map [wheel-down] 'sidescroll--mouse-wheel)
+        (define-key map [mouse-4] 'sidescroll--mouse-wheel)
+        (define-key map [mouse-5] 'sidescroll--mouse-wheel)
         (use-local-map map)))
     window))
 
@@ -187,6 +192,23 @@ Behaves like a scrollbar - dragging scrolls the main buffer."
       ;; Sync to main buffer
       (when sidescroll--main-buffer
         (sidescroll--sync-from-minimap)))))
+
+(defun sidescroll--mouse-wheel (event)
+  "Handle mouse wheel scrolling in the minimap.
+Scrolls the main buffer synchronously."
+  (interactive "e")
+  (let* ((main-window (get-buffer-window sidescroll--main-buffer))
+         (button (event-basic-type event)))
+    (when main-window
+      ;; Scroll the main window directly
+      (with-selected-window main-window
+        (cond
+         ((memq button '(wheel-up mouse-4))
+          (scroll-down 3))
+         ((memq button '(wheel-down mouse-5))
+          (scroll-up 3))))
+      ;; Update minimap position and highlight
+      (sidescroll--sync-to-minimap))))
 
 (defun sidescroll--sync-from-minimap ()
   "Synchronize the minimap's position to the main buffer."
