@@ -129,7 +129,14 @@ Can be either \\='left or \\='right."
       ;; Remove truncation glyph ('$' character)
       (let ((table (make-display-table)))
         (set-display-table-slot table 'truncation ?\s)
-        (setq-local buffer-display-table table)))
+        (setq-local buffer-display-table table))
+      
+      ;; Setup mouse bindings for scrollbar-like behavior
+      (let ((map (make-sparse-keymap)))
+        (define-key map [down-mouse-1] 'sidescroll--mouse-drag)
+        (define-key map [drag-mouse-1] 'sidescroll--mouse-drag)
+        (define-key map [mouse-1] 'sidescroll--mouse-drag)
+        (use-local-map map)))
     window))
 
 (defun sidescroll--update-current-line-overlay ()
@@ -166,17 +173,38 @@ Can be either \\='left or \\='right."
       (sidescroll--update-current-line-overlay)
       (setq sidescroll--updating nil))))
 
+(defun sidescroll--mouse-drag (event)
+  "Handle mouse drag events in the minimap.
+Behaves like a scrollbar - dragging scrolls the main buffer."
+  (interactive "e")
+  (let* ((start (event-start event))
+         (window (posn-window start))
+         (pos (posn-point start)))
+    (when (and (windowp window) pos)
+      ;; Move point in minimap to where user clicked
+      (with-selected-window window
+        (goto-char pos))
+      ;; Sync to main buffer
+      (when sidescroll--main-buffer
+        (sidescroll--sync-from-minimap)))))
+
 (defun sidescroll--sync-from-minimap ()
   "Synchronize the minimap's position to the main buffer."
   (when (and sidescroll--main-buffer
              (buffer-live-p sidescroll--main-buffer)
              (not sidescroll--updating))
-    (let ((minimap-point (point)))
-      (setq sidescroll--updating t)
-      (with-current-buffer sidescroll--main-buffer
-        (goto-char minimap-point)
-        (recenter))
-      (setq sidescroll--updating nil))))
+    (let* ((minimap-point (point))
+           (main-window (get-buffer-window sidescroll--main-buffer)))
+      (when main-window
+        (setq sidescroll--updating t)
+        (with-selected-window main-window
+          (goto-char minimap-point)
+          (recenter))
+        ;; Update highlight
+        (sidescroll--update-current-line-overlay)
+        ;; Return focus to main window
+        (select-window main-window)
+        (setq sidescroll--updating nil)))))
 
 (defun sidescroll--update-minimap-content ()
   "Update the minimap buffer to reflect the main buffer's content."
