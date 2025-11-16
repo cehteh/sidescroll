@@ -132,6 +132,23 @@ Can be either \\='left or \\='right."
         (setq-local buffer-display-table table)))
     window))
 
+(defun sidescroll--update-current-line-overlay ()
+  "Update the current line highlight overlay in the minimap."
+  (when (and sidescroll--minimap-window
+             (window-live-p sidescroll--minimap-window))
+    (let ((main-window (get-buffer-window sidescroll--main-buffer)))
+      (when main-window
+        (with-current-buffer (window-buffer sidescroll--minimap-window)
+          (let ((line-start (with-selected-window main-window
+                              (line-beginning-position)))
+                (line-end (with-selected-window main-window
+                            (line-end-position))))
+            (if sidescroll--current-line-overlay
+                (move-overlay sidescroll--current-line-overlay line-start (1+ line-end))
+              (setq sidescroll--current-line-overlay 
+                    (make-overlay line-start (1+ line-end)))
+              (overlay-put sidescroll--current-line-overlay 'face 'sidescroll-current-line-face))))))))
+
 (defun sidescroll--sync-to-minimap ()
   "Synchronize the main buffer's position to the minimap."
   (when (and sidescroll-mode
@@ -145,6 +162,8 @@ Can be either \\='left or \\='right."
         (when (eq sidescroll--main-buffer main-buffer)
           (goto-char main-point)
           (recenter)))
+      ;; Update current line highlight
+      (sidescroll--update-current-line-overlay)
       (setq sidescroll--updating nil))))
 
 (defun sidescroll--sync-from-minimap ()
@@ -175,6 +194,11 @@ Can be either \\='left or \\='right."
 
 (defun sidescroll--cleanup ()
   "Clean up the minimap window and buffer."
+  ;; Clean up overlay
+  (when sidescroll--current-line-overlay
+    (delete-overlay sidescroll--current-line-overlay)
+    (setq sidescroll--current-line-overlay nil))
+  ;; Clean up window and buffer
   (when (and sidescroll--minimap-window
              (window-live-p sidescroll--minimap-window))
     (let ((minimap-buffer (window-buffer sidescroll--minimap-window)))
