@@ -64,15 +64,14 @@ Can be either \\='left or \\='right."
   :type 'integer
   :group 'sidescroll)
 
-(defcustom sidescroll-line-spacing 0
-  "Line spacing for the minimap window.
-Can be a positive integer, zero, or negative (if supported by Emacs)."
-  :type 'integer
-  :group 'sidescroll)
-
 (defface sidescroll-face
   '((t (:weight ultra-light :height 80 :width condensed)))
   "Face used for text in the sidescroll minimap window."
+  :group 'sidescroll)
+
+(defface sidescroll-current-line-face
+  '((t (:inherit sidescroll-face :box (:line-width 1 :color "gray") :extend t)))
+  "Face used to highlight the current line in the sidescroll minimap window."
   :group 'sidescroll)
 
 (defvar-local sidescroll--minimap-window nil
@@ -83,6 +82,12 @@ Can be a positive integer, zero, or negative (if supported by Emacs)."
 
 (defvar-local sidescroll--updating nil
   "Flag to prevent recursive updates during synchronization.")
+
+(defvar-local sidescroll--current-line-overlay nil
+  "Overlay for highlighting the current line in the minimap.")
+
+(defvar-local sidescroll--visible-region-overlay nil
+  "Overlay for highlighting the visible region in the minimap.")
 
 (defun sidescroll--get-minimap-buffer (main-buffer)
   "Get or create the minimap buffer for MAIN-BUFFER."
@@ -114,8 +119,8 @@ Can be a positive integer, zero, or negative (if supported by Emacs)."
       ;; Make buffer read-only
       (setq buffer-read-only t)
       
-      ;; Set line spacing (buffer-local)
-      (setq-local line-spacing sidescroll-line-spacing)
+      ;; Set line spacing to zero (buffer-local)
+      (setq-local line-spacing 0)
       
       ;; Set other visual properties
       (setq cursor-type nil)
@@ -137,19 +142,57 @@ Can be a positive integer, zero, or negative (if supported by Emacs)."
         (use-local-map map)))
     window))
 
+(defun sidescroll--update-highlights ()
+  "Update the current line and visible region highlights in the minimap."
+  (when (and sidescroll--minimap-window
+             (window-live-p sidescroll--minimap-window))
+    (with-selected-window sidescroll--minimap-window
+      (let ((main-window (get-buffer-window sidescroll--main-buffer))
+            (minimap-buffer (current-buffer)))
+        (when main-window
+          ;; Update current line overlay
+          (let ((main-line-start (with-selected-window main-window
+                                   (line-beginning-position)))
+                (main-line-end (with-selected-window main-window
+                                 (line-end-position))))
+            (if sidescroll--current-line-overlay
+                (move-overlay sidescroll--current-line-overlay 
+                             main-line-start (1+ main-line-end) minimap-buffer)
+              (setq sidescroll--current-line-overlay 
+                    (make-overlay main-line-start (1+ main-line-end) minimap-buffer))
+              (overlay-put sidescroll--current-line-overlay 'face 'sidescroll-current-line-face)))
+          
+          ;; Update visible region overlay
+          (let ((win-start (window-start main-window))
+                (win-end (window-end main-window t)))
+            (if sidescroll--visible-region-overlay
+                (move-overlay sidescroll--visible-region-overlay 
+                             win-start win-end minimap-buffer)
+              (setq sidescroll--visible-region-overlay 
+                    (make-overlay win-start win-end minimap-buffer))
+              (overlay-put sidescroll--visible-region-overlay 'face 
+                          '(:background "gray20")))))))))
+
 (defun sidescroll--sync-to-minimap ()
   "Synchronize the main buffer's position to the minimap."
   (when (and sidescroll-mode
              sidescroll--minimap-window
              (window-live-p sidescroll--minimap-window)
              (not sidescroll--updating))
-    (let ((main-point (point))
-          (main-buffer (current-buffer)))
+    (let* ((main-point (point))
+           (main-buffer (current-buffer))
+           (main-window (selected-window))
+           (win-start (window-start main-window))
+           (win-end (window-end main-window t))
+           (win-middle (/ (+ win-start win-end) 2)))
       (setq sidescroll--updating t)
       (with-selected-window sidescroll--minimap-window
         (when (eq sidescroll--main-buffer main-buffer)
-          (goto-char main-point)
-          (recenter)))
+          ;; Center the visible region in the minimap
+          (goto-char win-middle)
+          (recenter)
+          ;; Update highlights
+          (sidescroll--update-highlights)))
       (setq sidescroll--updating nil))))
 
 (defun sidescroll--sync-from-minimap ()
@@ -168,14 +211,9 @@ Can be a positive integer, zero, or negative (if supported by Emacs)."
   "Handle mouse drag events in the minimap.
 Synchronize the main buffer position when clicking or dragging in the minimap."
   (interactive "e")
-  (let* ((start (event-start event))
-         (window (posn-window start))
-         (pos (posn-point start)))
-    (when (and (windowp window) pos)
-      (with-selected-window window
-        (goto-char pos)
-        (when sidescroll--main-buffer
-          (sidescroll--sync-from-minimap))))))
+  (mouse-set-point event)
+  (when sidescroll--main-buffer
+    (sidescroll--sync-from-minimap)))
 
 (defun sidescroll--update-minimap-content ()
   "Update the minimap buffer to reflect the main buffer's content."
@@ -193,6 +231,14 @@ Synchronize the main buffer position when clicking or dragging in the minimap."
 
 (defun sidescroll--cleanup ()
   "Clean up the minimap window and buffer."
+  ;; Clean up overlays
+  (when sidescroll--current-line-overlay
+    (delete-overlay sidescroll--current-line-overlay)
+    (setq sidescroll--current-line-overlay nil))
+  (when sidescroll--visible-region-overlay
+    (delete-overlay sidescroll--visible-region-overlay)
+    (setq sidescroll--visible-region-overlay nil))
+  ;; Clean up window and buffer
   (when (and sidescroll--minimap-window
              (window-live-p sidescroll--minimap-window))
     (let ((minimap-buffer (window-buffer sidescroll--minimap-window)))
