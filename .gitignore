@@ -1,0 +1,14 @@
+# Emacs byte-compiled files
+*.elc
+
+# Emacs auto-save files
+*~
+\#*\#
+.\#*
+
+# Emacs backup files
+*.bak
+
+# Emacs package files
+*-autoloads.el
+*-pkg.el
