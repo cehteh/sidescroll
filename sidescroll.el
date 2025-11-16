@@ -4,6 +4,7 @@
 
 ;; Author: Christian Thaeter
 ;; Version: 0.1.0
+;; Maintainer: Christian Thaeter
 ;; Package-Requires: ((emacs "26.1"))
 ;; Keywords: convenience, frames
 ;; URL: https://github.com/cehteh/sidescroll
@@ -170,7 +171,7 @@ A smaller value makes more content visible."
     (sidescroll--sync-to-minimap)))
 
 (defun sidescroll--after-change-hook (&rest _args)
-  "Hook function to update minimap content after buffer changes."
+  "Hook function to update minimap content after buffer change."
   (when sidescroll-mode
     (sidescroll--update-minimap-content)))
 
