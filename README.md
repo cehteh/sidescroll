@@ -9,8 +9,10 @@ Sidescroll creates a minimap-style side window that displays the same buffer wit
 ## Features
 
 - **Customizable positioning**: Display minimap on the left or right side
-- **Adjustable font size**: Control how much content is visible in the minimap
-- **Automatic synchronization**: Cursor position stays in sync between main buffer and minimap
+- **Customizable face**: Full control over minimap appearance through `sidescroll-face`
+- **Bidirectional synchronization**: Scrolling in either window updates the other
+- **Drag-scroll navigation**: Click and drag in the minimap to scroll the main buffer
+- **Automatic cursor synchronization**: Cursor position stays in sync between main buffer and minimap
 - **Clean interface**: No line numbers, no modeline in the minimap
 - **Buffer change tracking**: Content updates immediately as you edit
 
@@ -59,12 +61,17 @@ Which side to display the minimap window. Can be `'left` or `'right` (default: `
 (setq sidescroll-window-side 'left)
 ```
 
-### `sidescroll-font-size`
+### `sidescroll-face`
 
-Font size in points for the minimap window (default: `2`). A smaller value shows more content.
+A customizable face that controls the appearance of the minimap text. The `:height` attribute controls the size, where lower values show more content (default: `20` means 0.2x normal size). You can also customize other face attributes like foreground, background, font family, etc.
 
 ```elisp
-(setq sidescroll-font-size 3)
+;; Customize just the height
+(set-face-attribute 'sidescroll-face nil :height 30)
+
+;; Or customize multiple attributes
+(custom-set-faces
+ '(sidescroll-face ((t (:height 20 :foreground "gray50")))))
 ```
 
 ### `sidescroll-window-width`
@@ -74,6 +81,10 @@ Width of the minimap window in columns (default: `30`).
 ```elisp
 (setq sidescroll-window-width 40)
 ```
+
+### `sidescroll-font-size` (deprecated)
+
+This variable is deprecated in favor of customizing `sidescroll-face`. It's maintained for backward compatibility but using the face is preferred.
 
 ## Requirements
 
