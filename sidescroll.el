@@ -139,6 +139,11 @@ Can be either \\='left or \\='right."
         (define-key map [down-mouse-1] 'sidescroll--mouse-drag)
         (define-key map [drag-mouse-1] 'sidescroll--mouse-drag)
         (define-key map [mouse-1] 'sidescroll--mouse-drag)
+        ;; Mouse wheel bindings
+        (define-key map [wheel-up] 'sidescroll--mouse-wheel)
+        (define-key map [wheel-down] 'sidescroll--mouse-wheel)
+        (define-key map [mouse-4] 'sidescroll--mouse-wheel)
+        (define-key map [mouse-5] 'sidescroll--mouse-wheel)
         (use-local-map map)))
     window))
 
@@ -200,12 +205,16 @@ Can be either \\='left or \\='right."
   (when (and sidescroll--main-buffer
              (buffer-live-p sidescroll--main-buffer)
              (not sidescroll--updating))
-    (let ((minimap-point (point)))
-      (setq sidescroll--updating t)
-      (with-current-buffer sidescroll--main-buffer
-        (goto-char minimap-point)
-        (recenter))
-      (setq sidescroll--updating nil))))
+    (let* ((minimap-point (point))
+           (main-window (get-buffer-window sidescroll--main-buffer)))
+      (when main-window
+        (setq sidescroll--updating t)
+        (with-selected-window main-window
+          (goto-char minimap-point)
+          (recenter))
+        ;; Update highlights after syncing
+        (sidescroll--update-highlights)
+        (setq sidescroll--updating nil)))))
 
 (defun sidescroll--mouse-drag (event)
   "Handle mouse drag events in the minimap.
@@ -214,6 +223,18 @@ Synchronize the main buffer position when clicking or dragging in the minimap."
   (mouse-set-point event)
   (when sidescroll--main-buffer
     (sidescroll--sync-from-minimap)))
+
+(defun sidescroll--mouse-wheel (event)
+  "Handle mouse wheel scrolling in the minimap.
+Synchronize scrolling with the main buffer."
+  (interactive "e")
+  (let ((minimap-window (selected-window)))
+    ;; Perform the scroll in the minimap
+    (mwheel-scroll event)
+    ;; Sync the position to the main buffer
+    (when (and sidescroll--main-buffer
+               (eq (selected-window) minimap-window))
+      (sidescroll--sync-from-minimap))))
 
 (defun sidescroll--update-minimap-content ()
   "Update the minimap buffer to reflect the main buffer's content."
