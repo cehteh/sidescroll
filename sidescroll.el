@@ -86,9 +86,6 @@ Can be either \\='left or \\='right."
 (defvar-local sidescroll--current-line-overlay nil
   "Overlay for highlighting the current line in the minimap.")
 
-(defvar-local sidescroll--visible-region-overlay nil
-  "Overlay for highlighting the visible region in the minimap.")
-
 (defun sidescroll--get-minimap-buffer (main-buffer)
   "Get or create the minimap buffer for MAIN-BUFFER."
   (let ((minimap-name (format " *sidescroll-%s*" (buffer-name main-buffer))))
@@ -148,12 +145,11 @@ Can be either \\='left or \\='right."
     window))
 
 (defun sidescroll--update-highlights ()
-  "Update the current line and visible region highlights in the minimap."
+  "Update the current line highlight in the minimap."
   (when (and sidescroll--minimap-window
              (window-live-p sidescroll--minimap-window))
-    (with-selected-window sidescroll--minimap-window
-      (let ((main-window (get-buffer-window sidescroll--main-buffer))
-            (minimap-buffer (current-buffer)))
+    (with-current-buffer (window-buffer sidescroll--minimap-window)
+      (let ((main-window (get-buffer-window sidescroll--main-buffer)))
         (when main-window
           ;; Update current line overlay
           (let ((main-line-start (with-selected-window main-window
@@ -162,21 +158,10 @@ Can be either \\='left or \\='right."
                                  (line-end-position))))
             (if sidescroll--current-line-overlay
                 (move-overlay sidescroll--current-line-overlay 
-                             main-line-start (1+ main-line-end) minimap-buffer)
+                             main-line-start (1+ main-line-end))
               (setq sidescroll--current-line-overlay 
-                    (make-overlay main-line-start (1+ main-line-end) minimap-buffer))
-              (overlay-put sidescroll--current-line-overlay 'face 'sidescroll-current-line-face)))
-          
-          ;; Update visible region overlay
-          (let ((win-start (window-start main-window))
-                (win-end (window-end main-window t)))
-            (if sidescroll--visible-region-overlay
-                (move-overlay sidescroll--visible-region-overlay 
-                             win-start win-end minimap-buffer)
-              (setq sidescroll--visible-region-overlay 
-                    (make-overlay win-start win-end minimap-buffer))
-              (overlay-put sidescroll--visible-region-overlay 'face 
-                          '(:background "gray20")))))))))
+                    (make-overlay main-line-start (1+ main-line-end)))
+              (overlay-put sidescroll--current-line-overlay 'face 'sidescroll-current-line-face))))))))
 
 (defun sidescroll--sync-to-minimap ()
   "Synchronize the main buffer's position to the minimap."
@@ -214,27 +199,43 @@ Can be either \\='left or \\='right."
           (recenter))
         ;; Update highlights after syncing
         (sidescroll--update-highlights)
+        ;; Return focus to main window
+        (select-window main-window)
         (setq sidescroll--updating nil)))))
 
 (defun sidescroll--mouse-drag (event)
   "Handle mouse drag events in the minimap.
 Synchronize the main buffer position when clicking or dragging in the minimap."
   (interactive "e")
-  (mouse-set-point event)
-  (when sidescroll--main-buffer
-    (sidescroll--sync-from-minimap)))
+  (let* ((start (event-start event))
+         (window (posn-window start))
+         (pos (posn-point start)))
+    (when (and (windowp window) pos)
+      (with-selected-window window
+        (goto-char pos)
+        (when sidescroll--main-buffer
+          (sidescroll--sync-from-minimap))))))
 
 (defun sidescroll--mouse-wheel (event)
   "Handle mouse wheel scrolling in the minimap.
 Synchronize scrolling with the main buffer."
   (interactive "e")
-  (let ((minimap-window (selected-window)))
-    ;; Perform the scroll in the minimap
-    (mwheel-scroll event)
-    ;; Sync the position to the main buffer
-    (when (and sidescroll--main-buffer
-               (eq (selected-window) minimap-window))
-      (sidescroll--sync-from-minimap))))
+  (let* ((window (posn-window (event-start event)))
+         (main-window (get-buffer-window sidescroll--main-buffer)))
+    (when (and window main-window)
+      ;; Get scroll direction and amount
+      (let ((button (event-basic-type event)))
+        (cond
+         ((memq button '(wheel-up mouse-4))
+          ;; Scroll up in main window
+          (with-selected-window main-window
+            (scroll-down 3)))
+         ((memq button '(wheel-down mouse-5))
+          ;; Scroll down in main window
+          (with-selected-window main-window
+            (scroll-up 3))))
+        ;; Update minimap to reflect main window position
+        (sidescroll--sync-to-minimap)))))
 
 (defun sidescroll--update-minimap-content ()
   "Update the minimap buffer to reflect the main buffer's content."
@@ -256,9 +257,6 @@ Synchronize scrolling with the main buffer."
   (when sidescroll--current-line-overlay
     (delete-overlay sidescroll--current-line-overlay)
     (setq sidescroll--current-line-overlay nil))
-  (when sidescroll--visible-region-overlay
-    (delete-overlay sidescroll--visible-region-overlay)
-    (setq sidescroll--visible-region-overlay nil))
   ;; Clean up window and buffer
   (when (and sidescroll--minimap-window
              (window-live-p sidescroll--minimap-window))
