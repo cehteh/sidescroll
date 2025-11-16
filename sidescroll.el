@@ -167,12 +167,16 @@ Can be either \\='left or \\='right."
              sidescroll--minimap-window
              (window-live-p sidescroll--minimap-window)
              (not sidescroll--updating))
-    (let ((main-point (point))
-          (main-buffer (current-buffer)))
+    (let* ((main-window (selected-window))
+           (main-buffer (current-buffer))
+           (win-start (window-start main-window))
+           (win-end (window-end main-window t))
+           (win-middle (/ (+ win-start win-end) 2)))
       (setq sidescroll--updating t)
       (with-selected-window sidescroll--minimap-window
         (when (eq sidescroll--main-buffer main-buffer)
-          (goto-char main-point)
+          ;; Center the visible region in minimap
+          (goto-char win-middle)
           (recenter)))
       ;; Update current line highlight
       (sidescroll--update-current-line-overlay)
