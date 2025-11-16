@@ -32,7 +32,9 @@
 ;;
 ;; Features:
 ;; - Customizable position (left or right side)
-;; - Adjustable font size for the minimap
+;; - Customizable face for complete control over minimap appearance
+;; - Bidirectional scrolling synchronization
+;; - Drag-scroll navigation in the minimap
 ;; - Automatic cursor synchronization
 ;; - Clean interface (no line numbers, no modeline)
 ;;
@@ -42,7 +44,7 @@
 ;;
 ;; Customization:
 ;; - `sidescroll-window-side': Choose 'left or 'right (default: 'right)
-;; - `sidescroll-font-size': Font size in points for minimap (default: 2)
+;; - `sidescroll-face': Customize the appearance of the minimap text
 ;; - `sidescroll-window-width': Width of minimap window in columns (default: 30)
 
 ;;; Code:
@@ -61,8 +63,16 @@ Can be either \\='left or \\='right."
 
 (defcustom sidescroll-font-size 2
   "Font size in points for the minimap window.
-A smaller value makes more content visible."
+A smaller value makes more content visible.
+This is deprecated in favor of customizing `sidescroll-face'."
   :type 'integer
+  :group 'sidescroll)
+
+(defface sidescroll-face
+  '((t :height 20))
+  "Face used for the sidepane minimap.
+Customize this face to control the appearance of the minimap text.
+The :height attribute controls the size (default 20 means 0.2x normal size)."
   :group 'sidescroll)
 
 (defcustom sidescroll-window-width 30
@@ -78,6 +88,9 @@ A smaller value makes more content visible."
 
 (defvar-local sidescroll--updating nil
   "Flag to prevent recursive updates during synchronization.")
+
+(defvar-local sidescroll--drag-start nil
+  "Starting position for drag-scroll in minimap.")
 
 (defun sidescroll--get-minimap-buffer (main-buffer)
   "Get or create the minimap buffer for MAIN-BUFFER."
@@ -96,8 +109,9 @@ A smaller value makes more content visible."
                    (window-width . ,sidescroll-window-width)
                    (preserve-size . (t . nil))))))
     (with-selected-window window
-      ;; Set the buffer text scale
-      (text-scale-set (- sidescroll-font-size 10))
+      ;; Apply the customizable face to the entire buffer
+      (buffer-face-mode 1)
+      (setq buffer-face-mode-face 'sidescroll-face)
       
       ;; Disable line numbers
       (when (fboundp 'display-line-numbers-mode)
@@ -111,7 +125,15 @@ A smaller value makes more content visible."
       
       ;; Set other visual properties
       (setq cursor-type nil)
-      (setq truncate-lines nil))
+      (setq truncate-lines nil)
+      
+      ;; Setup drag-scroll mouse bindings
+      (local-set-key [down-mouse-1] #'sidescroll--mouse-drag-start)
+      (local-set-key [drag-mouse-1] #'sidescroll--mouse-drag)
+      (local-set-key [mouse-1] #'sidescroll--mouse-click)
+      
+      ;; Add window scroll function to sync scrolling to main buffer
+      (add-hook 'window-scroll-functions #'sidescroll--sync-scroll-from-minimap nil t))
     window))
 
 (defun sidescroll--sync-to-minimap ()
@@ -134,12 +156,56 @@ A smaller value makes more content visible."
   (when (and sidescroll--main-buffer
              (buffer-live-p sidescroll--main-buffer)
              (not sidescroll--updating))
-    (let ((minimap-point (point)))
+    (let ((minimap-point (point))
+          (minimap-window (selected-window)))
       (setq sidescroll--updating t)
       (with-current-buffer sidescroll--main-buffer
-        (goto-char minimap-point)
-        (recenter))
+        (when-let ((main-window (get-buffer-window sidescroll--main-buffer)))
+          (with-selected-window main-window
+            (goto-char minimap-point)
+            (recenter))))
       (setq sidescroll--updating nil))))
+
+(defun sidescroll--sync-scroll-from-minimap (window display-start)
+  "Synchronize scroll position from minimap WINDOW to main buffer.
+DISPLAY-START is the position at the start of the window."
+  (when (and sidescroll--main-buffer
+             (buffer-live-p sidescroll--main-buffer)
+             (not sidescroll--updating))
+    (setq sidescroll--updating t)
+    (when-let ((main-window (get-buffer-window sidescroll--main-buffer)))
+      (with-selected-window main-window
+        (goto-char display-start)
+        (recenter 0)))
+    (setq sidescroll--updating nil)))
+
+(defun sidescroll--mouse-drag-start (event)
+  "Start drag-scroll operation in minimap at EVENT position."
+  (interactive "e")
+  (mouse-set-point event)
+  (setq sidescroll--drag-start (window-start))
+  ;; Sync to main buffer on click
+  (sidescroll--sync-from-minimap))
+
+(defun sidescroll--mouse-drag (event)
+  "Handle drag-scroll in minimap for EVENT."
+  (interactive "e")
+  (when sidescroll--drag-start
+    (let* ((start-pos (event-start event))
+           (window (posn-window start-pos))
+           (pos (posn-point start-pos)))
+      (when (and window pos)
+        (with-selected-window window
+          (goto-char pos)
+          ;; Sync the scroll position to main buffer
+          (sidescroll--sync-from-minimap))))))
+
+(defun sidescroll--mouse-click (event)
+  "Handle mouse click in minimap for EVENT."
+  (interactive "e")
+  (mouse-set-point event)
+  (sidescroll--sync-from-minimap)
+  (setq sidescroll--drag-start nil))
 
 (defun sidescroll--update-minimap-content ()
   "Update the minimap buffer to reflect the main buffer's content."
@@ -202,13 +268,17 @@ A smaller value makes more content visible."
   "Toggle sidescroll minimap mode.
 
 When enabled, displays a minimap of the current buffer in a side window.
-The minimap shows the same buffer content with a much smaller font,
+The minimap shows the same buffer content with a customizable smaller font,
 providing an overview of the entire file.
 
-The minimap automatically synchronizes with the main buffer:
+The minimap features bidirectional synchronization:
 - Cursor position is kept in sync
+- Scrolling in either window updates the other
 - Content changes are reflected immediately
-- The minimap has no line numbers or modeline for a clean view"
+- Click and drag in the minimap to scroll the main buffer
+- The minimap has no line numbers or modeline for a clean view
+
+Customize `sidescroll-face' to control the minimap appearance."
   :lighter " Sidescroll"
   :group 'sidescroll
   (if sidescroll-mode

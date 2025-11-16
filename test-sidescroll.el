@@ -27,7 +27,13 @@
   "Test customization variables exist."
   (should (custom-variable-p 'sidescroll-window-side))
   (should (custom-variable-p 'sidescroll-font-size))
-  (should (custom-variable-p 'sidescroll-window-width)))
+  (should (custom-variable-p 'sidescroll-window-width))
+  (should (facep 'sidescroll-face)))
+
+(ert-deftest sidescroll-test-face-customization ()
+  "Test that sidescroll-face is properly defined."
+  (should (facep 'sidescroll-face))
+  (should (face-attribute 'sidescroll-face :height)))
 
 (ert-deftest sidescroll-test-minimap-buffer-creation ()
   "Test that minimap buffer is created correctly."
@@ -60,5 +66,17 @@
       (with-current-buffer minimap-buffer
         (should (string-match-p "New line" (buffer-string)))))
     (sidescroll-mode -1)))
+
+(ert-deftest sidescroll-test-mouse-functions ()
+  "Test that mouse drag-scroll functions are defined."
+  (should (fboundp 'sidescroll--mouse-drag-start))
+  (should (fboundp 'sidescroll--mouse-drag))
+  (should (fboundp 'sidescroll--mouse-click)))
+
+(ert-deftest sidescroll-test-sync-functions ()
+  "Test that bidirectional sync functions are defined."
+  (should (fboundp 'sidescroll--sync-to-minimap))
+  (should (fboundp 'sidescroll--sync-from-minimap))
+  (should (fboundp 'sidescroll--sync-scroll-from-minimap)))
 
 ;;; test-sidescroll.el ends here
