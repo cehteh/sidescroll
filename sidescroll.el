@@ -59,15 +59,19 @@ Can be either \\='left or \\='right."
                  (const :tag "Right" right))
   :group 'sidescroll)
 
-(defcustom sidescroll-font-size 2
-  "Font size in points for the minimap window.
-A smaller value makes more content visible."
-  :type 'integer
-  :group 'sidescroll)
-
 (defcustom sidescroll-window-width 30
   "Width of the minimap window in columns."
   :type 'integer
+  :group 'sidescroll)
+
+(defface sidescroll-face
+  '((t (:weight ultra-light :height 80 :width condensed)))
+  "Face used for text in the sidescroll minimap window."
+  :group 'sidescroll)
+
+(defface sidescroll-current-line-face
+  '((t (:inherit sidescroll-face :box (:line-width 1 :color "gray") :extend t)))
+  "Face used to highlight the current line in the sidescroll minimap window."
   :group 'sidescroll)
 
 (defvar-local sidescroll--minimap-window nil
@@ -78,6 +82,9 @@ A smaller value makes more content visible."
 
 (defvar-local sidescroll--updating nil
   "Flag to prevent recursive updates during synchronization.")
+
+(defvar-local sidescroll--current-line-overlay nil
+  "Overlay for highlighting the current line in the minimap.")
 
 (defun sidescroll--get-minimap-buffer (main-buffer)
   "Get or create the minimap buffer for MAIN-BUFFER."
@@ -96,8 +103,8 @@ A smaller value makes more content visible."
                    (window-width . ,sidescroll-window-width)
                    (preserve-size . (t . nil))))))
     (with-selected-window window
-      ;; Set the buffer text scale
-      (text-scale-set (- sidescroll-font-size 10))
+      ;; Apply the sidescroll face to buffer text
+      (buffer-face-set 'sidescroll-face)
       
       ;; Disable line numbers
       (when (fboundp 'display-line-numbers-mode)
@@ -109,9 +116,20 @@ A smaller value makes more content visible."
       ;; Make buffer read-only
       (setq buffer-read-only t)
       
+      ;; Set line spacing to zero (buffer-local)
+      (setq-local line-spacing 0)
+      
       ;; Set other visual properties
       (setq cursor-type nil)
-      (setq truncate-lines nil))
+      (setq truncate-lines t)
+      
+      ;; Disable fringes
+      (set-window-fringes window 0 0)
+      
+      ;; Remove truncation glyph ('$' character)
+      (let ((table (make-display-table)))
+        (set-display-table-slot table 'truncation ?\s)
+        (setq-local buffer-display-table table)))
     window))
 
 (defun sidescroll--sync-to-minimap ()
