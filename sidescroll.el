@@ -59,15 +59,20 @@ Can be either \\='left or \\='right."
                  (const :tag "Right" right))
   :group 'sidescroll)
 
-(defcustom sidescroll-font-size 2
-  "Font size in points for the minimap window.
-A smaller value makes more content visible."
-  :type 'integer
-  :group 'sidescroll)
-
 (defcustom sidescroll-window-width 30
   "Width of the minimap window in columns."
   :type 'integer
+  :group 'sidescroll)
+
+(defcustom sidescroll-line-spacing 0
+  "Line spacing for the minimap window.
+Can be a positive integer, zero, or negative (if supported by Emacs)."
+  :type 'integer
+  :group 'sidescroll)
+
+(defface sidescroll-face
+  '((t (:weight ultra-light :height 80 :width condensed)))
+  "Face used for text in the sidescroll minimap window."
   :group 'sidescroll)
 
 (defvar-local sidescroll--minimap-window nil
@@ -96,8 +101,8 @@ A smaller value makes more content visible."
                    (window-width . ,sidescroll-window-width)
                    (preserve-size . (t . nil))))))
     (with-selected-window window
-      ;; Set the buffer text scale
-      (text-scale-set (- sidescroll-font-size 10))
+      ;; Apply the sidescroll face to buffer text
+      (buffer-face-set 'sidescroll-face)
       
       ;; Disable line numbers
       (when (fboundp 'display-line-numbers-mode)
@@ -109,6 +114,9 @@ A smaller value makes more content visible."
       ;; Make buffer read-only
       (setq buffer-read-only t)
       
+      ;; Set line spacing (buffer-local)
+      (setq-local line-spacing sidescroll-line-spacing)
+      
       ;; Set other visual properties
       (setq cursor-type nil)
       (setq truncate-lines t)
@@ -116,15 +124,17 @@ A smaller value makes more content visible."
       ;; Disable fringes
       (set-window-fringes window 0 0)
       
-      ;; Disable truncation indicator
-      (setq-local fringe-indicator-alist
-                  (cons '(truncation . nil) fringe-indicator-alist))
+      ;; Remove truncation glyph ('$' character)
+      (let ((table (make-display-table)))
+        (set-display-table-slot table 'truncation ?\s)
+        (setq-local buffer-display-table table))
       
       ;; Setup mouse bindings for dragging
-      (use-local-map (make-sparse-keymap))
-      (local-set-key [down-mouse-1] 'sidescroll--mouse-drag)
-      (local-set-key [drag-mouse-1] 'sidescroll--mouse-drag)
-      (local-set-key [mouse-1] 'sidescroll--mouse-drag))
+      (let ((map (make-sparse-keymap)))
+        (define-key map [down-mouse-1] 'sidescroll--mouse-drag)
+        (define-key map [drag-mouse-1] 'sidescroll--mouse-drag)
+        (define-key map [mouse-1] 'sidescroll--mouse-drag)
+        (use-local-map map)))
     window))
 
 (defun sidescroll--sync-to-minimap ()
@@ -158,11 +168,14 @@ A smaller value makes more content visible."
   "Handle mouse drag events in the minimap.
 Synchronize the main buffer position when clicking or dragging in the minimap."
   (interactive "e")
-  (let ((start (event-start event)))
-    (when (windowp (posn-window start))
-      (with-selected-window (posn-window start)
-        (goto-char (posn-point start))
-        (sidescroll--sync-from-minimap)))))
+  (let* ((start (event-start event))
+         (window (posn-window start))
+         (pos (posn-point start)))
+    (when (and (windowp window) pos)
+      (with-selected-window window
+        (goto-char pos)
+        (when sidescroll--main-buffer
+          (sidescroll--sync-from-minimap))))))
 
 (defun sidescroll--update-minimap-content ()
   "Update the minimap buffer to reflect the main buffer's content."
